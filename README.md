@@ -8,6 +8,13 @@ GET /process?url=https://example.com/photo.jpg&width=800&height=600&format=webp&
 
 The API fetches an image from a user-supplied HTTPS URL, resizes, crops and converts it with Sharp, and returns the processed bytes. Because it fetches URLs from untrusted users, it treats SSRF and resource exhaustion as primary design constraints, not afterthoughts.
 
+**Live demo**
+
+- Playground: https://imageflow-web.onrender.com
+- API: https://imageflow-api-u92h.onrender.com (try [`/health`](https://imageflow-api-u92h.onrender.com/health) or [a sample transform](https://imageflow-api-u92h.onrender.com/process?url=https%3A%2F%2Fupload.wikimedia.org%2Fwikipedia%2Fcommons%2F4%2F47%2FPNG_transparency_demonstration_1.png&width=400&format=webp))
+
+Both run on Render's free tier. The API sleeps after 15 minutes without traffic, so the first request after a pause can take 30–60 seconds while it starts.
+
 ---
 
 ## Contents
@@ -108,6 +115,7 @@ Both apps read from the repo-root `.env`. The API also reads the process environ
 | `LOG_LEVEL`            | `info`                  | Pino level (`silent` … `trace`)                                                                                                                                                                                                                                                   |
 | `CORS_ORIGINS`         | `http://localhost:5173` | Comma-separated browser origins allowed to read responses                                                                                                                                                                                                                         |
 | `TRUST_PROXY`          | `false`                 | `false`, or the number of proxy hops in front of the API (`1` on Render or behind an ALB). A hop is trusted only if it connects from a private network, so clients can't spoof `X-Forwarded-For` to dodge rate limits. Avoid `true`: it trusts the client-supplied leftmost entry |
+| `TRUSTED_PROXY_CIDRS`  | (empty)                 | Comma-separated public proxy ranges to trust as hops, in addition to private networks. Needed when a CDN sits in front, e.g. Cloudflare's ranges on Render                                                                                                                        |
 | `RATE_LIMIT_MAX`       | `60`                    | Requests per IP per window                                                                                                                                                                                                                                                        |
 | `RATE_LIMIT_WINDOW_MS` | `60000`                 | Rate-limit window                                                                                                                                                                                                                                                                 |
 | `CACHE_TTL_SECONDS`    | `3600`                  | Cache entry lifetime; also used for `Cache-Control: max-age`                                                                                                                                                                                                                      |
@@ -338,6 +346,18 @@ The playground calls only the public `GET /process` URL shown in the "API reques
 
 ## Deployment
 
+**Live deployment (Render).** The demo above is deployed from [`render.yaml`](render.yaml), a Render Blueprint that defines both services:
+
+- `imageflow-api`: a Docker web service built from the `Dockerfile`, with `/health` as its health check. On the free plan (512 MB RAM) it runs with `MAX_CONCURRENT_JOBS=4` and a 50 MB cache.
+  - **Client IPs.** Requests reach the API through a Cloudflare edge and then Render's internal proxy, so `X-Forwarded-For` arrives as `<anything the client sent>, <client>, <Cloudflare edge>, <Render proxy>`. The API trusts up to 3 hops, each either private or in Cloudflare's published ranges (`TRUSTED_PROXY_CIDRS`), and uses the first untrusted address as the client. Rate limits therefore apply per real visitor, and a client-supplied `X-Forwarded-For` can't change its bucket. This was verified against the live deployment.
+- `imageflow-web`: a static site built with `npm run build -w apps/web` and served from `apps/web/dist`.
+
+To deploy your own copy:
+
+1. Fork the repo and sign in to Render with GitHub.
+2. Choose **New → Blueprint**, select the repo, and click **Deploy Blueprint**.
+3. Render appends a suffix to a service hostname when the name is taken, as happened with `imageflow-api` here. If that happens, set `VITE_API_BASE_URL` (web) and `CORS_ORIGINS` (API) in `render.yaml` to the assigned URLs and push; the Blueprint re-syncs and redeploys on every push to `main`.
+
 **Container (API).**
 
 ```bash
@@ -388,7 +408,7 @@ The image is a multi-stage build on `node:22-bookworm-slim`. It contains only pr
 - **Animated WebP** is reduced to its first frame.
 - **Output color space.** The output is sRGB and the ICC profile is stripped along with the other metadata.
 - **No signed URLs or API keys.** Anyone who can reach the service can use it, subject to rate limits.
-- **Docker image not verified in this environment.** The Docker daemon wasn't running in the development environment, so the `Dockerfile` was written but not test-built there. `npm run build` and `npm start` were verified.
+- **Free-tier hosting.** The live demo sleeps after 15 idle minutes (30–60 second cold start) and has a single 512 MB instance.
 
 ## What I would improve with more time
 
