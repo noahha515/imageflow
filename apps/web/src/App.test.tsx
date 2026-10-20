@@ -70,6 +70,7 @@ describe('App', () => {
     const displayed = screen.getByTestId('request-url').textContent;
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[0]).toBe(displayed);
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ cache: 'no-store' });
     expect(displayed).toBe(
       'http://localhost:3000/process?url=https%3A%2F%2Fimages.example.com%2Fcat.jpg&width=800&height=600&format=webp&quality=80&crop=fill',
     );

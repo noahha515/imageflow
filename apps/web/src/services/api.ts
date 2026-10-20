@@ -123,7 +123,9 @@ export async function requestProcessedImage(
 ): Promise<Omit<ProcessResult, 'objectUrl'> & { blob: Blob }> {
   let res: Response;
   try {
-    res = await fetch(requestUrl, { signal: signal ?? null });
+    // Bypass the browser HTTP cache so every click really calls the API and the
+    // X-Cache label reflects the server cache, not a replayed stored response.
+    res = await fetch(requestUrl, { cache: 'no-store', signal: signal ?? null });
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') throw err;
     throw new ProcessError({

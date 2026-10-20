@@ -59,7 +59,9 @@ export function ImagePreview({
         </div>
         <div>
           <dt className="text-slate-500">Format</dt>
-          <dd className="font-medium text-slate-900 uppercase">{info?.format ?? 'Unavailable'}</dd>
+          <dd className={`font-medium text-slate-900 ${info?.format ? 'uppercase' : ''}`}>
+            {info?.format ?? 'Unavailable'}
+          </dd>
         </div>
         <div>
           <dt className="text-slate-500">File size</dt>
