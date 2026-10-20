@@ -1,5 +1,6 @@
 # Render Blueprint: New → Blueprint → select this repo.
-# If Render assigns different hostnames, update CORS_ORIGINS and VITE_API_BASE_URL.
+# Render appended a suffix to the API hostname (imageflow-api was taken).
+# If hostnames change, update CORS_ORIGINS and VITE_API_BASE_URL.
 services:
   - type: web
     name: imageflow-api
@@ -29,7 +30,7 @@ services:
       - key: NODE_VERSION
         value: '22'
       - key: VITE_API_BASE_URL
-        value: https://imageflow-api.onrender.com
+        value: https://imageflow-api-u92h.onrender.com
     headers:
       - path: /*
         name: X-Frame-Options
