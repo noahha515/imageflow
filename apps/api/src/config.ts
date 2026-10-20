@@ -1,9 +1,11 @@
 import { z } from 'zod';
 
-const bool = z
-  .enum(['true', 'false'])
+/** 'true' | 'false' | hop count. A hop count trusts only entries added by known proxies. */
+const trustProxy = z
+  .string()
   .default('false')
-  .transform((v) => v === 'true');
+  .refine((v) => /^(true|false|\d{1,2})$/.test(v), 'must be true, false or a hop count')
+  .transform((v) => (v === 'true' ? true : v === 'false' ? false : Number(v)));
 const int = (def: number) => z.coerce.number().int().positive().default(def);
 
 const EnvSchema = z.object({
@@ -11,7 +13,7 @@ const EnvSchema = z.object({
   HOST: z.string().default('0.0.0.0'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   CORS_ORIGINS: z.string().default('http://localhost:5173'),
-  TRUST_PROXY: bool,
+  TRUST_PROXY: trustProxy,
   RATE_LIMIT_MAX: int(60),
   RATE_LIMIT_WINDOW_MS: int(60_000),
   CACHE_TTL_SECONDS: int(3600),
@@ -41,7 +43,7 @@ export interface AppConfig {
   host: string;
   logLevel: string;
   corsOrigins: string[];
-  trustProxy: boolean;
+  trustProxy: boolean | number;
   rateLimit: { max: number; windowMs: number };
   cache: { ttlSeconds: number; maxEntries: number; maxBytes: number };
   maxConcurrentJobs: number;

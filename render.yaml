@@ -1,0 +1,39 @@
+# Render Blueprint: New → Blueprint → select this repo.
+# If Render assigns different hostnames, update CORS_ORIGINS and VITE_API_BASE_URL.
+services:
+  - type: web
+    name: imageflow-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: CORS_ORIGINS
+        value: https://imageflow-web.onrender.com
+      # Render's proxy appends the real client IP; trust exactly one hop.
+      - key: TRUST_PROXY
+        value: '1'
+      # Free instances have 512 MB RAM.
+      - key: MAX_CONCURRENT_JOBS
+        value: '4'
+      - key: CACHE_MAX_BYTES
+        value: '52428800'
+
+  - type: web
+    name: imageflow-web
+    runtime: static
+    buildCommand: npm ci && npm run build -w apps/web
+    staticPublishPath: ./apps/web/dist
+    envVars:
+      - key: NODE_VERSION
+        value: '22'
+      - key: VITE_API_BASE_URL
+        value: https://imageflow-api.onrender.com
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff

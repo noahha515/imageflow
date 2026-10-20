@@ -102,19 +102,19 @@ npm run build -w apps/api && npm start -w apps/api   # compiled API
 
 Both apps read from the repo-root `.env`. The API also reads the process environment.
 
-| Variable               | Default                 | Purpose                                                                                                                      |
-| ---------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `PORT` / `HOST`        | `3000` / `0.0.0.0`      | Listen address                                                                                                               |
-| `LOG_LEVEL`            | `info`                  | Pino level (`silent` … `trace`)                                                                                              |
-| `CORS_ORIGINS`         | `http://localhost:5173` | Comma-separated browser origins allowed to read responses                                                                    |
-| `TRUST_PROXY`          | `false`                 | Trust `X-Forwarded-For`. Enable **only** behind a trusted load balancer, or clients can spoof their IP and dodge rate limits |
-| `RATE_LIMIT_MAX`       | `60`                    | Requests per IP per window                                                                                                   |
-| `RATE_LIMIT_WINDOW_MS` | `60000`                 | Rate-limit window                                                                                                            |
-| `CACHE_TTL_SECONDS`    | `3600`                  | Cache entry lifetime; also used for `Cache-Control: max-age`                                                                 |
-| `CACHE_MAX_ENTRIES`    | `500`                   | Cache entry cap                                                                                                              |
-| `CACHE_MAX_BYTES`      | `104857600` (100 MB)    | Cache memory cap (sum of output sizes)                                                                                       |
-| `MAX_CONCURRENT_JOBS`  | `8`                     | Fetch and process jobs allowed in flight at once                                                                             |
-| `VITE_API_BASE_URL`    | `http://localhost:3000` | API origin used by the UI (applied at build time)                                                                            |
+| Variable               | Default                 | Purpose                                                                                                                                                                                                                                                                           |
+| ---------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PORT` / `HOST`        | `3000` / `0.0.0.0`      | Listen address                                                                                                                                                                                                                                                                    |
+| `LOG_LEVEL`            | `info`                  | Pino level (`silent` … `trace`)                                                                                                                                                                                                                                                   |
+| `CORS_ORIGINS`         | `http://localhost:5173` | Comma-separated browser origins allowed to read responses                                                                                                                                                                                                                         |
+| `TRUST_PROXY`          | `false`                 | `false`, or the number of proxy hops in front of the API (`1` on Render or behind an ALB). A hop is trusted only if it connects from a private network, so clients can't spoof `X-Forwarded-For` to dodge rate limits. Avoid `true`: it trusts the client-supplied leftmost entry |
+| `RATE_LIMIT_MAX`       | `60`                    | Requests per IP per window                                                                                                                                                                                                                                                        |
+| `RATE_LIMIT_WINDOW_MS` | `60000`                 | Rate-limit window                                                                                                                                                                                                                                                                 |
+| `CACHE_TTL_SECONDS`    | `3600`                  | Cache entry lifetime; also used for `Cache-Control: max-age`                                                                                                                                                                                                                      |
+| `CACHE_MAX_ENTRIES`    | `500`                   | Cache entry cap                                                                                                                                                                                                                                                                   |
+| `CACHE_MAX_BYTES`      | `104857600` (100 MB)    | Cache memory cap (sum of output sizes)                                                                                                                                                                                                                                            |
+| `MAX_CONCURRENT_JOBS`  | `8`                     | Fetch and process jobs allowed in flight at once                                                                                                                                                                                                                                  |
+| `VITE_API_BASE_URL`    | `http://localhost:3000` | API origin used by the UI (applied at build time)                                                                                                                                                                                                                                 |
 
 Invalid values make the API fail fast at startup. The security limits in the next sections are constants in `config.ts`, not env vars: loosening them is a security decision that should go through code review.
 
@@ -351,7 +351,7 @@ The image is a multi-stage build on `node:22-bookworm-slim`. It contains only pr
 
 **Suggested AWS shape** (not implemented; none of it is needed at this scope):
 
-- **ECS Fargate** behind an ALB runs the container. Set `TRUST_PROXY=true` there, because the ALB is the trusted proxy. Scale on CPU, since Sharp is CPU-bound.
+- **ECS Fargate** behind an ALB runs the container. Set `TRUST_PROXY=1` there, because the ALB is the one trusted proxy hop. Scale on CPU, since Sharp is CPU-bound.
 - **CloudFront** in front of the ALB, keyed on the full query string, serves most repeat traffic from the edge and makes per-instance caches matter far less.
 - **AWS WAF** on CloudFront/ALB provides distributed rate limiting and bot filtering. The in-process limiter remains a per-instance backstop.
 - **S3** stores processed images durably, keyed by a hash of the cache key, if regenerating them becomes expensive.

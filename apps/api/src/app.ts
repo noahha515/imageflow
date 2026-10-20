@@ -6,6 +6,7 @@ import { registerProcessRoute } from './routes/process.js';
 import { LruCache } from './services/cache.js';
 import type { ProcessedImage } from './services/image-processor.js';
 import { createSafeFetcher, type FetchImage } from './services/safe-fetch.js';
+import { isPublicAddress } from './services/url-policy.js';
 import { AppError, toErrorBody } from './utils/errors.js';
 import { genRequestId } from './utils/request-id.js';
 
@@ -16,6 +17,19 @@ export interface AppDeps {
   /** Clock for the cache (tests). */
   now?: () => number;
   logger?: FastifyServerOptions['logger'];
+}
+
+/**
+ * Fastify ignores bare hop counts because it cannot tell whether the immediate
+ * peer is really a proxy. We trust up to `hops` proxies, and only when each one
+ * connects from a private network (where platform load balancers sit), so a
+ * client reaching the app directly cannot spoof X-Forwarded-For.
+ */
+export function trustProxyOption(
+  value: boolean | number,
+): boolean | ((addr: string, hop: number) => boolean) {
+  if (typeof value !== 'number') return value;
+  return (addr, hop) => hop < value && !isPublicAddress(addr);
 }
 
 function frameworkStatus(err: unknown): number {
@@ -31,7 +45,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const { config } = deps;
   const app = Fastify({
     logger: deps.logger ?? { level: config.logLevel },
-    trustProxy: config.trustProxy,
+    trustProxy: trustProxyOption(config.trustProxy),
     genReqId: genRequestId,
     requestIdHeader: false,
     bodyLimit: 1024, // GET-only API

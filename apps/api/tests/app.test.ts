@@ -114,6 +114,34 @@ describe('rate limiting', () => {
     expect([a.statusCode, a2.statusCode, b.statusCode]).toEqual([200, 429, 200]);
   });
 
+  it('with TRUST_PROXY=1, keys on the proxy-added IP so spoofed X-Forwarded-For is ignored', async () => {
+    ({ app } = await buildTestApp(
+      { [SRC]: await jpeg(10, 10) },
+      { config: { trustProxy: 1, rateLimit: { max: 1, windowMs: 60_000 } } },
+    ));
+    const send = (xff: string) =>
+      app.inject({ url: processUrl({ url: SRC }), headers: { 'x-forwarded-for': xff } });
+    expect((await send('1.1.1.1, 198.51.100.7')).statusCode).toBe(200);
+    // Same real client (rightmost, proxy-added entry), different spoofed leftmost entry.
+    expect((await send('2.2.2.2, 198.51.100.7')).statusCode).toBe(429);
+    expect((await send('1.1.1.1, 198.51.100.8')).statusCode).toBe(200);
+  });
+
+  it('with TRUST_PROXY=1, does not trust X-Forwarded-For from a public peer', async () => {
+    ({ app } = await buildTestApp(
+      { [SRC]: await jpeg(10, 10) },
+      { config: { trustProxy: 1, rateLimit: { max: 1, windowMs: 60_000 } } },
+    ));
+    const send = (xff: string) =>
+      app.inject({
+        url: processUrl({ url: SRC }),
+        remoteAddress: '8.8.4.4', // public client connecting directly, not via a proxy
+        headers: { 'x-forwarded-for': xff },
+      });
+    expect((await send('198.51.100.7')).statusCode).toBe(200);
+    expect((await send('198.51.100.8')).statusCode).toBe(429);
+  });
+
   it('does not rate limit the health check', async () => {
     ({ app } = await buildTestApp({}, { config: { rateLimit: { max: 1, windowMs: 60_000 } } }));
     for (let i = 0; i < 3; i++) expect((await app.inject('/health')).statusCode).toBe(200);
