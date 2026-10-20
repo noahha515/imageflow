@@ -1,5 +1,9 @@
 import rateLimit from '@fastify/rate-limit';
-import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
+import Fastify, {
+  type FastifyInstance,
+  type FastifyRequest,
+  type FastifyServerOptions,
+} from 'fastify';
 import type { AppConfig } from './config.js';
 import { registerCors } from './middleware/cors.js';
 import { registerProcessRoute } from './routes/process.js';
@@ -44,7 +48,18 @@ function frameworkStatus(err: unknown): number {
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const { config } = deps;
   const app = Fastify({
-    logger: deps.logger ?? { level: config.logLevel },
+    logger: deps.logger ?? {
+      level: config.logLevel,
+      serializers: {
+        // Default fields plus the forwarded chain, to diagnose proxy/IP issues in production.
+        req: (req: FastifyRequest) => ({
+          method: req.method,
+          url: req.url,
+          remoteAddress: req.ip,
+          forwardedFor: req.headers['x-forwarded-for'],
+        }),
+      },
+    },
     trustProxy: trustProxyOption(config.trustProxy),
     genReqId: genRequestId,
     requestIdHeader: false,
