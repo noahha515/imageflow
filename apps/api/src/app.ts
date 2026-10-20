@@ -1,3 +1,4 @@
+import { BlockList, isIP } from 'node:net';
 import rateLimit from '@fastify/rate-limit';
 import Fastify, {
   type FastifyInstance,
@@ -25,15 +26,28 @@ export interface AppDeps {
 
 /**
  * Fastify ignores bare hop counts because it cannot tell whether the immediate
- * peer is really a proxy. We trust up to `hops` proxies, and only when each one
- * connects from a private network (where platform load balancers sit), so a
- * client reaching the app directly cannot spoof X-Forwarded-For.
+ * peer is really a proxy. We walk X-Forwarded-For from the right, trusting at
+ * most `hops` proxies, and only ones on a private network (platform load
+ * balancers) or in `trustedCidrs` (e.g. a CDN's published ranges). The first
+ * untrusted address is the client, so entries a client writes further left
+ * are never reached.
  */
 export function trustProxyOption(
   value: boolean | number,
+  trustedCidrs: readonly string[] = [],
 ): boolean | ((addr: string, hop: number) => boolean) {
   if (typeof value !== 'number') return value;
-  return (addr, hop) => hop < value && !isPublicAddress(addr);
+  const ranges = { 4: new BlockList(), 6: new BlockList() };
+  for (const cidr of trustedCidrs) {
+    const [ip = '', prefix = ''] = cidr.split('/');
+    const family = isIP(ip) === 6 ? 6 : 4;
+    ranges[family].addSubnet(ip, Number(prefix), family === 6 ? 'ipv6' : 'ipv4');
+  }
+  const inTrustedRange = (addr: string) => {
+    const family = isIP(addr);
+    return family !== 0 && ranges[family === 6 ? 6 : 4].check(addr, family === 6 ? 'ipv6' : 'ipv4');
+  };
+  return (addr, hop) => hop < value && (!isPublicAddress(addr) || inTrustedRange(addr));
 }
 
 function frameworkStatus(err: unknown): number {
@@ -60,7 +74,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         }),
       },
     },
-    trustProxy: trustProxyOption(config.trustProxy),
+    trustProxy: trustProxyOption(config.trustProxy, config.trustedProxyCidrs),
     genReqId: genRequestId,
     requestIdHeader: false,
     bodyLimit: 1024, // GET-only API

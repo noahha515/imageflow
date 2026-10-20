@@ -1,3 +1,4 @@
+import { isIP } from 'node:net';
 import { z } from 'zod';
 
 /** 'true' | 'false' | hop count. A hop count trusts only entries added by known proxies. */
@@ -14,6 +15,7 @@ const EnvSchema = z.object({
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   CORS_ORIGINS: z.string().default('http://localhost:5173'),
   TRUST_PROXY: trustProxy,
+  TRUSTED_PROXY_CIDRS: z.string().default(''),
   RATE_LIMIT_MAX: int(60),
   RATE_LIMIT_WINDOW_MS: int(60_000),
   CACHE_TTL_SECONDS: int(3600),
@@ -44,10 +46,28 @@ export interface AppConfig {
   logLevel: string;
   corsOrigins: string[];
   trustProxy: boolean | number;
+  /** Public proxy ranges (e.g. a CDN) trusted in addition to private networks. */
+  trustedProxyCidrs: string[];
   rateLimit: { max: number; windowMs: number };
   cache: { ttlSeconds: number; maxEntries: number; maxBytes: number };
   maxConcurrentJobs: number;
   limits: Limits;
+}
+
+function parseCidrs(raw: string): string[] {
+  const cidrs = raw
+    .split(',')
+    .map((c) => c.trim())
+    .filter(Boolean);
+  for (const cidr of cidrs) {
+    const [ip = '', prefix = ''] = cidr.split('/');
+    const family = isIP(ip);
+    const max = family === 4 ? 32 : 128;
+    if (family === 0 || !/^\d{1,3}$/.test(prefix) || Number(prefix) > max) {
+      throw new Error(`Invalid environment configuration: TRUSTED_PROXY_CIDRS entry "${cidr}"`);
+    }
+  }
+  return cidrs;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -64,6 +84,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       .map((o) => o.trim())
       .filter(Boolean),
     trustProxy: e.TRUST_PROXY,
+    trustedProxyCidrs: parseCidrs(e.TRUSTED_PROXY_CIDRS),
     rateLimit: { max: e.RATE_LIMIT_MAX, windowMs: e.RATE_LIMIT_WINDOW_MS },
     cache: {
       ttlSeconds: e.CACHE_TTL_SECONDS,

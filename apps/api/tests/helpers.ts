@@ -11,6 +11,7 @@ export function testConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     logLevel: 'silent',
     corsOrigins: ['http://localhost:5173'],
     trustProxy: false,
+    trustedProxyCidrs: [],
     rateLimit: { max: 1000, windowMs: 60_000 },
     cache: { ttlSeconds: 60, maxEntries: 100, maxBytes: 50 * 1024 * 1024 },
     maxConcurrentJobs: 8,

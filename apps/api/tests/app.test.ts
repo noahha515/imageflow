@@ -142,6 +142,46 @@ describe('rate limiting', () => {
     expect((await send('198.51.100.8')).statusCode).toBe(429);
   });
 
+  describe('behind Render (Cloudflare edge -> Render proxy), as seen in production logs', () => {
+    // Real chain from the deployed API, with a spoofed leftmost entry:
+    // "<spoof>, <client>, <Cloudflare edge>, <Render proxy>"; the socket peer is the Render proxy.
+    const RENDER_PROXY = '10.192.117.149';
+    const chain = (spoof: string, client: string, edge = '172.71.147.51') =>
+      `${spoof},${client}, ${edge}, ${RENDER_PROXY}`;
+
+    async function renderApp(trustedProxyCidrs: string[]) {
+      ({ app } = await buildTestApp(
+        { [SRC]: await jpeg(10, 10) },
+        {
+          config: { trustProxy: 3, trustedProxyCidrs, rateLimit: { max: 1, windowMs: 60_000 } },
+        },
+      ));
+      return (xff: string) =>
+        app.inject({
+          url: processUrl({ url: SRC }),
+          remoteAddress: RENDER_PROXY,
+          headers: { 'x-forwarded-for': xff },
+        });
+    }
+
+    it('keys on the real client IP, ignoring spoofed entries and rotating edges', async () => {
+      const send = await renderApp(['172.64.0.0/13']);
+      expect((await send(chain('5.6.7.8', '151.240.46.246'))).statusCode).toBe(200);
+      // Same client via a different spoof and a different Cloudflare edge: still limited.
+      expect((await send(chain('9.9.9.9', '151.240.46.246', '172.71.146.181'))).statusCode).toBe(
+        429,
+      );
+      // A different real client gets its own bucket.
+      expect((await send(chain('5.6.7.8', '151.240.46.247'))).statusCode).toBe(200);
+    });
+
+    it('fails closed when the CDN range is not configured (keys on the edge, not the spoof)', async () => {
+      const send = await renderApp([]);
+      expect((await send(chain('5.6.7.8', '151.240.46.246'))).statusCode).toBe(200);
+      expect((await send(chain('9.9.9.9', '151.240.46.247'))).statusCode).toBe(429);
+    });
+  });
+
   it('does not rate limit the health check', async () => {
     ({ app } = await buildTestApp({}, { config: { rateLimit: { max: 1, windowMs: 60_000 } } }));
     for (let i = 0; i < 3; i++) expect((await app.inject('/health')).statusCode).toBe(200);
